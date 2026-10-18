@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SafeLink: check a link before you open it</title>
+<style>
+:root{
+  --ink:#1C2541; --paper:#F4F6F9; --surface:#FFFFFF; --muted:#5F6B85; --line:#D9DEE7;
+  --safe:#13795B; --safe-bg:#E3F4EC; --scam:#B42318; --scam-bg:#FDE8E6;
+  --warn:#A15C07; --warn-bg:#FDF1DC; --accent:#2F5BD3; --bit-off:#E6EAF1;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --ink:#E8ECF5; --paper:#121826; --surface:#1A2234; --muted:#9AA5BE; --line:#2C3650;
+    --safe:#4FC79B; --safe-bg:#12342A; --scam:#FF8577; --scam-bg:#3D1A18;
+    --warn:#F2B55C; --warn-bg:#3A2A10; --accent:#7EA0FF; --bit-off:#2A3349;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;
+  font-size:16px;line-height:1.5}
+.wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.brand{font-size:1.5rem;font-weight:700;letter-spacing:-.01em}
+.brand small{display:block;font-size:.95rem;font-weight:400;color:var(--muted)}
+nav{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px}
+nav button{border:0;background:none;color:var(--muted);font:inherit;font-size:.95rem;padding:7px 16px;border-radius:999px;cursor:pointer}
+nav button[aria-selected="true"]{background:var(--ink);color:var(--paper)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* checker */
+.ask{margin:40px 0 18px}
+.ask h1{font-size:clamp(1.8rem,4vw,2.6rem);line-height:1.15;margin:0 0 8px;letter-spacing:-.02em;max-width:22ch}
+.ask p{margin:0;color:var(--muted);max-width:60ch}
+.inputrow{display:flex;gap:10px;margin-top:22px}
+.inputrow input{flex:1;min-width:0;font:inherit;font-size:1.05rem;padding:14px 16px;border:2px solid var(--line);
+  border-radius:12px;background:var(--surface);color:var(--ink)}
+.btn{font:inherit;font-weight:600;border:0;border-radius:12px;padding:0 22px;cursor:pointer;background:var(--ink);color:var(--paper)}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line);padding:10px 16px}
+.tries{margin-top:10px;font-size:.9rem;color:var(--muted)}
+.tries button{font:inherit;font-size:.9rem;background:none;border:0;color:var(--accent);cursor:pointer;padding:2px 4px;text-decoration:underline}
+
+.verdict{margin-top:26px;border-radius:18px;padding:26px 28px;display:none}
+.verdict.show{display:block;animation:pop .25s ease-out}
+@keyframes pop{from{transform:scale(.985);opacity:.4}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.verdict.show{animation:none}}
+.verdict h2{margin:0 0 6px;font-size:clamp(1.5rem,3.4vw,2.1rem);line-height:1.2}
+.verdict p{margin:0;max-width:62ch}
+.verdict ul{margin:12px 0 0;padding-left:20px}
+.verdict .link{font-family:ui-monospace,Consolas,monospace;font-size:.9rem;word-break:break-all;opacity:.85;margin-top:12px}
+.v-scam{background:var(--scam-bg);color:var(--scam)}
+.v-suspicious{background:var(--warn-bg);color:var(--warn)}
+.v-safe{background:var(--safe-bg);color:var(--safe)}
+.verdict .after{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap}
+.verdict .after .btn{padding:9px 16px;font-size:.92rem;background:var(--warn);color:var(--surface)}
+
+.wave{margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 22px}
+.wave-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.wave h3{margin:0;font-size:1.05rem}
+.wave .lvl{font-weight:700}
+.meter{position:relative;height:14px;border-radius:7px;background:var(--bit-off);margin:14px 0 6px;overflow:hidden}
+.meter i{position:absolute;inset:0 auto 0 0;border-radius:7px;transition:width .4s}
+.meter b{position:absolute;top:0;bottom:0;width:2px;background:var(--ink);opacity:.35}
+.wave small{color:var(--muted)}
+
+/* under the hood */
+.hood{display:none;margin-top:28px}
+.hood.show{display:block}
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:20px}
+.controls .status{color:var(--muted);font-size:.92rem}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width:760px){.grid{grid-template-columns:1fr}.inputrow{flex-direction:column}.inputrow .btn{padding:14px}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;min-width:0}
+.panel.wide{grid-column:1/-1}
+.panel h3{margin:0 0 4px;font-size:1.05rem}
+.panel .sub{margin:0 0 14px;color:var(--muted);font-size:.9rem}
+.kv{display:grid;grid-template-columns:1fr auto;gap:6px 14px;font-size:.93rem}
+.kv span:nth-child(even){font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.bits{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.bit{border-radius:8px;padding:6px 8px;text-align:center;min-width:72px;font-variant-numeric:tabular-nums;font-size:.8rem;background:var(--bit-off);color:var(--muted)}
+.bit strong{display:block;font-size:1.1rem}
+.bit.on{background:var(--ink);color:var(--paper)}
+.keyline{font-family:ui-monospace,Consolas,monospace;font-size:.85rem;word-break:break-all;margin-top:12px}
+.bar{position:relative;height:26px;background:var(--bit-off);border-radius:6px;margin-top:8px}
+.bar i{position:absolute;top:0;bottom:0;width:2px;background:var(--accent)}
+.buckets{display:flex;gap:4px;align-items:flex-end;overflow-x:auto;padding:6px 0 4px;min-height:90px}
+.bucket{flex:0 0 auto;background:var(--accent);color:#fff;border-radius:6px 6px 2px 2px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;font-size:.72rem;padding:3px 4px;min-width:34px}
+.bucket.old{opacity:.55}
+.legend{display:flex;gap:16px;font-size:.85rem;color:var(--muted);margin-top:6px;flex-wrap:wrap}
+.legend em{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:6px;font-style:normal}
+canvas{width:100%;height:240px;display:block}
+.hbar{display:grid;grid-template-columns:110px 1fr 54px;gap:8px;align-items:center;font-size:.88rem;margin:5px 0}
+.hbar div{height:12px;border-radius:6px;background:var(--accent)}
+.hbar span:last-child{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.empty{color:var(--muted);font-size:.92rem}
+footer{margin-top:40px;color:var(--muted);font-size:.85rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">SafeLink<small>Check a link before you open it</small></div>
+    <nav role="tablist">
+      <button role="tab" aria-selected="true" data-tab="check">Check a link</button>
+      <button role="tab" aria-selected="false" data-tab="hood">How it works</button>
+    </nav>
+  </header>
+
+  <section id="tab-check">
+    <div class="ask">
+      <h1>Got a link on WhatsApp or SMS? Paste it here first.</h1>
+      <p>We check it against a list of known scam links and look for common tricks used in fake bank, KYC and delivery messages.</p>
+      <div class="inputrow">
+        <input id="url" type="text" placeholder="Paste a link, for example sbi-kyc-update.xyz" autocomplete="off" aria-label="Link to check">
+        <button class="btn" id="checkBtn">Check link</button>
+      </div>
+      <div class="tries">Try:
+        <button data-try="known">a known scam link</button>
+        <button data-try="https://www.sbi-kyc-update12.xyz/login">a fake-looking bank link</button>
+        <button data-try="https://www.irctc.co.in">irctc.co.in</button>
+      </div>
+    </div>
+
+    <div class="verdict" id="verdict" role="status" aria-live="polite"></div>
+
+    <div class="wave" id="waveBox">
+      <div class="wave-top">
+        <h3>Scam activity right now</h3>
+        <span class="lvl" id="waveLvl">Calm</span>
+      </div>
+      <div class="meter"><i id="waveFill"></i><b style="left:10%"></b><b style="left:25%"></b></div>
+      <small id="waveText">0 of the last 100 links checked were known scams.</small>
+    </div>
+  </section>
+
+  <section class="hood" id="tab-hood">
+    <div class="controls">
+      <button class="btn ghost" data-sim="normal">Simulate 500 normal checks</button>
+      <button class="btn ghost" data-sim="wave">Simulate a scam wave (300 checks)</button>
+      <button class="btn ghost" id="resetBtn">Reset stream</button>
+      <span class="status" id="simStatus"></span>
+    </div>
+    <div class="grid">
+      <div class="panel">
+        <h3>Bloom filter: the scam list</h3>
+        <p class="sub">Answers "is this link on the list?" without storing the links themselves.</p>
+        <div class="kv" id="bloomKv"></div>
+      </div>
+      <div class="panel">
+        <h3>Bloom filter: last link checked</h3>
+        <p class="sub">The link is hashed <span id="kText">k</span> times. All bits 1 means "maybe on the list"; any 0 means "definitely not".</p>
+        <div id="bitsBox"><p class="empty">Check a link to see its bit positions.</p></div>
+      </div>
+      <div class="panel wide">
+        <h3>DGIM: scam links in the last 100 checks</h3>
+        <p class="sub">DGIM estimate compared with the exact count. Dotted lines are the "rising" and "scam wave" thresholds.</p>
+        <canvas id="chart" width="900" height="240"></canvas>
+        <div class="legend"><span><em style="background:var(--ink)"></em>Exact count</span><span><em style="background:var(--accent)"></em>DGIM estimate</span></div>
+      </div>
+      <div class="panel">
+        <h3>DGIM buckets in memory</h3>
+        <p class="sub">Newest on the left. Sizes are powers of 2, at most two of each size. Faded bucket is the oldest; only half of it is counted.</p>
+        <div class="buckets" id="buckets"></div>
+        <div class="kv" id="dgimKv" style="margin-top:10px"></div>
+      </div>
+      <div class="panel">
+        <h3>Stream so far</h3>
+        <p class="sub">Every check is one bit in the stream: 1 if it was a known scam, else 0.</p>
+        <div class="kv" id="streamKv"></div>
+      </div>
+      <div class="panel wide">
+        <h3>MapReduce analytics on the scam list</h3>
+        <p class="sub">Computed by Job 2 over the whole blacklist: brands scammers pretend to be, and domain endings they use.</p>
+        <div class="grid" style="gap:24px">
+          <div id="brandBars"></div>
+          <div id="tldBars"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <footer>BDA mini project: Bloom Filter + DGIM + MapReduce. A link not on the list is not guaranteed safe; stay careful with links asking for OTP, PIN or KYC.</footer>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const fmt = n => Number(n).toLocaleString("en-IN");
+let lastCheck = null, lastUrl = "";
+
+async function api(path, body){
+  const r = await fetch(path, body ? {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)} : {});
+  return r.json();
+}
+
+/* tabs */
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
+  $("#tab-check").style.display = b.dataset.tab === "check" ? "" : "none";
+  $("#tab-hood").classList.toggle("show", b.dataset.tab === "hood");
+  if (b.dataset.tab === "hood") refresh();
+});
+
+/* checking */
+async function check(){
+  const url = $("#url").value.trim();
+  const v = $("#verdict");
+  if (!url){ $("#url").focus(); return; }
+  const res = await api("/api/check", {url});
+  if (res.error){ v.className = "verdict show v-suspicious"; v.innerHTML = `<p>${res.error}</p>`; return; }
+  lastCheck = res; lastUrl = url;
+  const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  let html;
+  if (res.verdict === "scam"){
+    v.className = "verdict show v-scam";
+    html = `<h2>Don’t open this link.</h2><p>It is on the list of known scam links. If you already opened it, do not enter any OTP, PIN, card or Aadhaar details, and report it at cybercrime.gov.in or call 1930.</p>`;
+  } else if (res.verdict === "suspicious"){
+    v.className = "verdict show v-suspicious";
+    html = `<h2>This link looks suspicious.</h2><p>It is not on our scam list yet, but it shows signs of a fake website:</p><ul>${res.reasons.map(r=>`<li>${esc(r)}</li>`).join("")}</ul>
+      <div class="after"><button class="btn" id="reportBtn">Report as scam</button></div>`;
+  } else {
+    v.className = "verdict show v-safe";
+    const fp = res.verdict === "false_positive" ? " The quick check flagged it for a second look, and the full list confirmed it is not there." : "";
+    html = `<h2>Not on the scam list.</h2><p>No known scam matches this link.${fp} Still, never share an OTP or PIN through a link.</p>`;
+  }
+  v.innerHTML = html + `<div class="link">${esc(url)}</div>`;
+  const rb = $("#reportBtn");
+  if (rb) rb.onclick = async () => { await api("/api/report", {url}); rb.outerHTML = "<p style='margin:0'>Reported. Future checks of this link will show it as a scam.</p>"; };
+  updateWave(res.wave);
+}
+$("#checkBtn").onclick = check;
+$("#url").addEventListener("keydown", e => { if (e.key === "Enter") check(); });
+document.querySelectorAll("[data-try]").forEach(b => b.onclick = async () => {
+  if (b.dataset.try === "known"){
+    const s = await api("/api/sample");
+    $("#url").value = s.url;
+  } else $("#url").value = b.dataset.try;
+  check();
+});
+
+function updateWave(w){
+  const pct = Math.min(100, w.scams_last_100);
+  const map = {calm:["Calm","var(--safe)"], rising:["Rising","var(--warn)"], alert:["Scam wave","var(--scam)"]};
+  const [label, col] = map[w.level];
+  $("#waveLvl").textContent = label; $("#waveLvl").style.color = col;
+  $("#waveFill").style.width = pct + "%"; $("#waveFill").style.background = col;
+  $("#waveText").textContent = w.level === "alert"
+    ? `About ${w.scams_last_100} of the last 100 links checked were known scams. A scam message is spreading; be extra careful today.`
+    : w.scams_last_100 ? `About ${w.scams_last_100} of the last 100 links checked were known scams.` : "None of the recent links checked were known scams.";
+}
+
+/* under the hood */
+document.querySelectorAll("[data-sim]").forEach(b => b.onclick = async () => {
+  $("#simStatus").textContent = "Running…";
+  const r = await api("/api/simulate", {mode:b.dataset.sim, n: b.dataset.sim === "wave" ? 300 : 500});
+  $("#simStatus").textContent = `Added ${r.simulated} checks.`;
+  updateWave(r.wave); refresh();
+});
+$("#resetBtn").onclick = async () => { await api("/api/reset", {}); $("#simStatus").textContent = "Stream reset."; refresh(); };
+
+function kv(el, rows){ el.innerHTML = rows.map(([a,b]) => `<span>${a}</span><span>${b}</span>`).join(""); }
+
+async function refresh(){
+  const s = await api("/api/stats");
+  const b = s.bloom, d = s.dgim, c = s.counters;
+  $("#kText").textContent = b.k;
+  kv($("#bloomKv"), [
+    ["Scam links stored", fmt(b.items)],
+    ["Bit array size (m)", fmt(b.m) + " bits"],
+    ["Hash functions (k)", b.k],
+    ["Memory used", b.memory_kb + " KB"],
+    ["Same list as a normal set", "≈ " + fmt(b.set_memory_kb) + " KB"],
+    ["Bits set to 1", b.fill_pct + "%"],
+    ["Expected false positive rate", b.expected_fp_pct + "%"],
+    ["Observed false positive rate", b.observed_fp_pct + "%"],
+    ["Database lookups avoided", b.lookups_saved_pct + "%"],
+  ]);
+  if (lastCheck){
+    $("#bitsBox").innerHTML = lastCheck.keys.map(k => `
+      <div class="keyline">${k.key} → ${k.bloom_says === "maybe" ? "maybe on list" : "definitely not on list"}</div>
+      <div class="bits">${k.bits.map(x => `<div class="bit ${x.bit ? "on" : ""}"><strong>${x.bit}</strong>${fmt(x.pos)}</div>`).join("")}</div>
+      <div class="bar" aria-hidden="true">${k.bits.map(x => `<i style="left:${(x.pos / b.m * 100).toFixed(2)}%"></i>`).join("")}</div>`).join("");
+  }
+  const bk = d.buckets;
+  $("#buckets").innerHTML = bk.length ? bk.map((x,i) => {
+    const h = 20 + Math.log2(x.size) * 12;
+    return `<div class="bucket ${i === bk.length - 1 ? "old" : ""}" style="height:${h}px" title="timestamp ${x.timestamp}, ${x.age} checks ago"><strong>${x.size}</strong></div>`;
+  }).join("") : `<p class="empty">No scam links in the window yet.</p>`;
+  kv($("#dgimKv"), [
+    ["Window size (N)", fmt(d.N) + " checks"],
+    ["Buckets kept", `${bk.length} (≈ ${d.memory_bytes} bytes)`],
+    ["Storing every bit would need", `${fmt(d.N)} bits (${d.exact_memory_bytes} bytes)`],
+    ["Bucket merges so far", fmt(d.merges)],
+  ]);
+  const err = (e,a) => a ? Math.abs(e - a) / a * 100 : 0;
+  kv($("#streamKv"), [
+    ["Links checked (stream length)", fmt(d.t)],
+    ["Known scams found", fmt(c.confirmed)],
+    ["Bloom said “definitely not”", fmt(c.bloom_no)],
+    ["Bloom said “maybe”", fmt(c.bloom_maybe)],
+    ["False alarms cleared by database", fmt(c.false_pos)],
+    ["Links reported by users", fmt(c.reported)],
+    [`Scams in last ${d.N}: DGIM / exact`, `${d.est_N} / ${d.exact_N} (${err(d.est_N, d.exact_N).toFixed(1)}% off)`],
+    ["Scams in last 100: DGIM / exact", `${d.est_100} / ${d.exact_100} (${err(d.est_100, d.exact_100).toFixed(1)}% off)`],
+  ]);
+  drawChart(s.timeline, s.thresholds);
+  bars($("#brandBars"), "Brands impersonated", s.scam_stats.brand || {});
+  bars($("#tldBars"), "Domain endings used", s.scam_stats.tld || {});
+}
+
+function bars(el, title, obj){
+  const e = Object.entries(obj).sort((a, b) => b[1] - a[1]); const max = Math.max(1, ...e.map(x => x[1]));
+  el.innerHTML = `<p class="sub" style="margin-bottom:6px"><strong style="color:var(--ink)">${title}</strong></p>` +
+    (e.length ? e.map(([k,v]) => `<div class="hbar"><span>${k}</span><div style="width:${v / max * 100}%"></div><span>${fmt(v)}</span></div>`).join("")
+              : `<p class="empty">Run mapreduce/run_local.py to compute this.</p>`);
+}
+
+function drawChart(tl, th){
+  const cv = $("#chart"), dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const pad = {l:36, r:10, t:10, b:22};
+  const ymax = Math.max(60, ...tl.map(p => Math.max(p.est, p.exact))) * 1.1;
+  const X = i => pad.l + (tl.length > 1 ? i / (tl.length - 1) : 0) * (W - pad.l - pad.r);
+  const Y = v => H - pad.b - v / ymax * (H - pad.t - pad.b);
+  g.font = "12px system-ui"; g.fillStyle = css("--muted"); g.strokeStyle = css("--line"); g.lineWidth = 1;
+  for (let v = 0; v <= ymax; v += 20){ g.beginPath(); g.moveTo(pad.l, Y(v)); g.lineTo(W - pad.r, Y(v)); g.stroke(); g.fillText(v, 4, Y(v) + 4); }
+  [[th.rising, "--warn"], [th.alert, "--scam"]].forEach(([v, c]) => {
+    g.setLineDash([4, 4]); g.strokeStyle = css(c); g.beginPath(); g.moveTo(pad.l, Y(v)); g.lineTo(W - pad.r, Y(v)); g.stroke(); g.setLineDash([]);
+  });
+  if (!tl.length){ g.fillStyle = css("--muted"); g.fillText("Check links or run a simulation to start the stream.", pad.l + 10, H / 2); return; }
+  const line = (key, col, w) => { g.strokeStyle = css(col); g.lineWidth = w; g.beginPath(); tl.forEach((p, i) => i ? g.lineTo(X(i), Y(p[key])) : g.moveTo(X(i), Y(p[key]))); g.stroke(); };
+  line("exact", "--ink", 2); line("est", "--accent", 1.5);
+  g.fillStyle = css("--muted"); g.fillText(`checks ${fmt(tl[0].t)} – ${fmt(tl[tl.length - 1].t)}`, pad.l, H - 5);
+}
+window.addEventListener("resize", () => { if ($("#tab-hood").classList.contains("show")) refresh(); });
+api("/api/stats").then(s => updateWave(s.wave));
+</script>
+</body>
+</html>

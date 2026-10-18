@@ -1,0 +1,39 @@
+{
+  "tld": {
+    ".in.net": 3201,
+    ".buzz": 3177,
+    ".site": 3176,
+    ".vip": 3173,
+    ".click": 3172,
+    ".live": 3166,
+    ".xyz": 3142,
+    ".top": 3132,
+    ".shop": 3129,
+    ".store": 3117
+  },
+  "brand": {
+    "whatsapp": 2097,
+    "phonepe": 2075,
+    "hdfc": 2059,
+    "icici": 2052,
+    "kotak": 2050,
+    "mahavitaran": 2048,
+    "paytm": 2040,
+    "irctc": 2036,
+    "instagram": 2032,
+    "jio": 2032
+  },
+  "lure": {
+    "login": 5524,
+    "verify": 5412,
+    "claim": 5398,
+    "offer": 3948,
+    "bill": 3940,
+    "refund": 3859,
+    "redeem": 3791,
+    "secure": 3773,
+    "account": 3735,
+    "kyc": 3665
+  },
+  "total_urls": 50000
+}
