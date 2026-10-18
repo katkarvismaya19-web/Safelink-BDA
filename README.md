@@ -1,82 +1,119 @@
-# SafeLink — Scam Link Checker with Live Scam-Wave Alerts
-**Big Data Analytics mini project · Bloom Filter + DGIM + MapReduce (Hadoop)**
+<div align="center">
 
-## Problem
-Fake KYC, bank, electricity-bill and parcel links spread on WhatsApp and SMS every day. Lakhs of known scam
-links exist, and a checker has to answer two questions instantly for millions of users:
-1. **Is this link a known scam?** → needs a membership test over a huge list, in very little memory → **Bloom Filter**
-2. **Is a scam wave happening right now?** → needs a count over a never-ending stream of checks → **DGIM**
-Building the filter and analysing the scam list itself is a batch job over big data → **MapReduce on Hadoop**
+# 🛡️ SafeLink
 
-## What a common user sees
-Paste a link → one clear answer:
-- **Don't open this link** — it is on the scam list
-- **This link looks suspicious** — not on the list, but shows fake-website signs (brand name + bait word, odd domain ending, raw IP, many hyphens). User can report it, which adds it to the Bloom filter.
-- **Not on the scam list**
-Plus a **Scam activity meter** (Calm / Rising / Scam wave) driven by DGIM.
+### Check a link before you open it
 
-## Architecture
+A scam-link checker with live scam-wave alerts, built on **Bloom Filters**, **DGIM** and **MapReduce**.
+
+![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.x-000000?logo=flask&logoColor=white)
+![Hadoop](https://img.shields.io/badge/Hadoop-Streaming-66CCFF?logo=apachehadoop&logoColor=black)
+![Bloom Filter](https://img.shields.io/badge/Bloom%20Filter-58.5%20KB%20for%2050k%20links-1C2541)
+![DGIM](https://img.shields.io/badge/DGIM-10%20buckets%20vs%201000%20bits-2F5BD3)
+![Subject](https://img.shields.io/badge/Big%20Data%20Analytics-Mini%20Project-13795B)
+
+<img src="docs/screenshots/checker.png" alt="SafeLink link checker" width="760">
+
+</div>
+
+---
+
+## The problem
+
+Fake KYC, bank, electricity-bill and parcel-delivery links spread on WhatsApp and SMS every day. A checker serving millions of people has to answer two questions instantly:
+
+| Question | Why it's hard | Our answer |
+|---|---|---|
+| Is this link a known scam? | The scam list has lakhs of links; storing and searching it for every check is costly | **Bloom Filter** |
+| Is a scam wave happening right now? | Checks arrive as an endless stream; we can't store all of it | **DGIM** |
+| How do we build the filter and study the scam list? | The list itself is big data | **MapReduce on Hadoop (HDFS)** |
+
+## What it does
+
+Paste a link and get one clear answer:
+
+- 🔴 **Don't open this link.** It's on the known scam list.
+- 🟠 **This link looks suspicious.** Not on the list, but it shows fake-website signs (bank name + bait word, odd domain ending, raw IP, many hyphens). One click reports it, and the Bloom Filter learns it instantly.
+- 🟢 **Not on the scam list.**
+
+A **scam activity meter** (Calm → Rising → Scam wave) shows when many scam links are being checked at once.
+
+## How it works
+
+```mermaid
+flowchart LR
+    subgraph Batch["Batch layer · Hadoop"]
+        A[blacklist.txt] --> B[(HDFS)]
+        B --> C[MapReduce Job 1<br/>Bloom filter build]
+        B --> D[MapReduce Job 2<br/>Scam analytics]
+        C --> E[bloom.bin]
+        D --> F[scam_stats.json]
+    end
+    subgraph Stream["Stream layer · Flask app"]
+        U[User pastes link] --> N[Normalise URL]
+        N --> BF{Bloom filter}
+        BF -- definitely not --> S[Not on list]
+        BF -- maybe --> DB[(Exact lookup)]
+        DB --> R[Scam or false alarm]
+        S --> BIT[Stream bit<br/>1 = scam, 0 = not]
+        R --> BIT
+        BIT --> DG[DGIM window N=1000]
+        DG --> W[Scam-wave meter]
+    end
+    E --> BF
 ```
-            BATCH LAYER (Hadoop)                              STREAM LAYER (Flask app)
- blacklist.txt ──► HDFS ──► MapReduce Job 1 ──► bloom.bin ──►  user link ─► normalise URL
-                         │  (mapper: k hash positions,          │              │
-                         │   combiner+reducer: unique bits)      │        Bloom filter check
-                         └► MapReduce Job 2 ──► scam_stats.json  │       ┌──────┴───────┐
-                            (brands, TLDs, bait words)           │   "definitely no"  "maybe"
-                                                                 │       │          exact DB lookup
-                                                                 │       │        scam / false alarm
-                                                                 │       └─────► bit (1 = scam) ─► DGIM (N = 1000)
-                                                                 │                         └─► scams in last 100 ─► wave alert
-```
-Two-stage check (Bloom first, database only on "maybe") is the same design Google Chrome Safe Browsing used.
-In our runs **~87% of checks never touch the database.**
 
-## Project structure
-| Path | What it does |
-|---|---|
-| `core/bloom_filter.py` | Bloom filter: optimal m and k, double hashing, save/load |
-| `core/dgim.py` | DGIM buckets, merge rule (max 2 per size), window queries for any k ≤ N |
-| `core/url_utils.py` | URL normalisation (lowercase, strip www, trailing slash) |
-| `mapreduce/bloom_mapper.py`, `bloom_reducer.py` | Job 1: builds the Bloom filter in parallel |
-| `mapreduce/stats_mapper.py`, `stats_reducer.py` | Job 2: brands impersonated, domain endings, bait words |
-| `mapreduce/run_local.py` | Simulates Hadoop locally: split → map → combine → shuffle/sort → reduce |
-| `mapreduce/build_from_hadoop_output.py` | Builds bloom.bin from a real Hadoop job's output |
-| `data/download_feeds.py` | Downloads REAL live scam feeds (OpenPhish, URLhaus) |
-| `data/generate_sample_data.py` | Generates 50,000 synthetic India-style scam links (offline fallback) |
-| `app.py` + `templates/index.html` | Web app: checker for users + "How it works" dashboard |
-| `experiments/evaluate.py` | Charts and numbers for the report |
+The Bloom Filter answers first and the exact database is queried only on a "maybe", the same design Google Chrome Safe Browsing used. In our runs, **about 87% of checks never touch the database.**
 
-## How to run
+## Concepts covered
+
+| Concept | Where | What it shows |
+|---|---|---|
+| **Bloom Filter** | `core/bloom_filter.py` | Optimal `m` and `k`, double hashing, zero false negatives, live inserts |
+| **DGIM** | `core/dgim.py` | Power-of-2 buckets, max 2 per size, merging, half-oldest-bucket estimate |
+| **MapReduce** | `mapreduce/` | Mapper, combiner, shuffle/sort, reducer via Hadoop Streaming |
+| **HDFS** | README commands | Blocks, replication, `fsck`, `put` / `getmerge` |
+| **Stream processing** | `app.py` | Every check is a bit in an unbounded stream |
+
+## Screenshots
+
+<table>
+<tr>
+<td width="62%"><img src="docs/screenshots/dashboard.png" alt="How it works dashboard"><br><sub><b>How it works</b>: live Bloom bit positions, DGIM buckets, estimate vs exact chart, MapReduce analytics</sub></td>
+<td width="38%"><img src="docs/screenshots/mobile-dark.png" alt="Mobile dark mode"><br><sub><b>Mobile, dark mode</b></sub></td>
+</tr>
+</table>
+
+## Quick start
+
 ```bash
+git clone https://github.com/katkarvismaya19-web/Safelink-BDA.git
+cd Safelink-BDA
 pip install -r requirements.txt
 
-# 1. Get data (choose one)
-python data/download_feeds.py          # real live scam links (needs internet)
-python data/generate_sample_data.py    # synthetic sample, works offline
+python data/download_feeds.py        # real live scam feeds (OpenPhish + URLhaus)
+# or: python data/generate_sample_data.py   (offline synthetic sample)
 
-# 2. Run the MapReduce jobs (local simulation of Hadoop)
-python mapreduce/run_local.py
-
-# 3. Start the app
-python app.py                          # open http://127.0.0.1:5000
-
-# 4. Report charts
-python experiments/evaluate.py         # saved in experiments/results/
+python mapreduce/run_local.py        # run both MapReduce jobs
+python app.py                        # open http://127.0.0.1:5000
 ```
-If you change the blacklist, re-run step 2 so the Bloom filter is rebuilt.
 
-## Running on a real Hadoop cluster
+Generate the report charts with `python experiments/evaluate.py` (saved to `experiments/results/`).
+
+<details>
+<summary><b>Run on a real Hadoop cluster</b></summary>
+
 ```bash
-# m and k for n URLs at 1% FP (run_local.py prints these too)
-python -c "from core.bloom_filter import optimal_params; import sys; n=sum(1 for _ in open('data/blacklist.txt')); print(optimal_params(n,0.01))"
+# m and k for n URLs at 1% false positives (run_local.py also prints these)
+python -c "from core.bloom_filter import optimal_params; n=sum(1 for _ in open('data/blacklist.txt')); print(optimal_params(n,0.01))"
 
 hdfs dfs -mkdir -p /safelink
 hdfs dfs -put data/blacklist.txt /safelink/
-hdfs fsck /safelink/blacklist.txt -files -blocks      # show blocks & replication
+hdfs fsck /safelink/blacklist.txt -files -blocks
 
 # Job 1: Bloom filter
 hadoop jar $HADOOP_HOME/share/hadoop/tools/lib/hadoop-streaming-*.jar \
-  -D mapreduce.job.name="SafeLink Bloom build" \
   -cmdenv BLOOM_M=<m> -cmdenv BLOOM_K=<k> \
   -input /safelink/blacklist.txt -output /safelink/bloom_out \
   -mapper bloom_mapper.py -combiner bloom_reducer.py -reducer bloom_reducer.py \
@@ -84,52 +121,88 @@ hadoop jar $HADOOP_HOME/share/hadoop/tools/lib/hadoop-streaming-*.jar \
 hdfs dfs -getmerge /safelink/bloom_out bloom_part.txt
 python mapreduce/build_from_hadoop_output.py bloom_part.txt <m> <k>
 
-# Job 2: analytics
+# Job 2: scam analytics
 hadoop jar $HADOOP_HOME/share/hadoop/tools/lib/hadoop-streaming-*.jar \
   -input /safelink/blacklist.txt -output /safelink/stats_out \
   -mapper stats_mapper.py -combiner stats_reducer.py -reducer stats_reducer.py \
   -file mapreduce/stats_mapper.py -file mapreduce/stats_reducer.py
-hdfs dfs -cat /safelink/stats_out/part-* | sort -t$'\t' -k2 -nr | head -20
+```
+</details>
+
+## Results
+
+Measured on 50,000 scam links.
+
+| Metric | Result |
+|---|---|
+| Bloom Filter memory | **58.5 KB** vs ≈ 4.3 MB for a normal set (~75× smaller) |
+| Hash functions | 7 (optimal for 1% target) |
+| False positives | 1.00% theoretical, **1.04% observed** |
+| False negatives | **0** (guaranteed) |
+| Database lookups avoided | ~87% |
+| MapReduce build vs direct build | Bit-for-bit identical |
+| DGIM memory (N = 1,000) | **~10 buckets** (~80 bytes) vs 1,000 bits |
+| DGIM error | ~12% mean, ~35% max (bound: 50%) |
+| DGIM buckets at N = 1,000,000 | ~29 |
+
+<table>
+<tr>
+<td><img src="experiments/results/1_bloom_fp_vs_memory.png" alt="Bloom memory vs false positives"></td>
+<td><img src="experiments/results/2_bloom_effect_of_k.png" alt="Effect of k"></td>
+</tr>
+<tr>
+<td><img src="experiments/results/3_dgim_vs_exact.png" alt="DGIM vs exact"></td>
+<td><img src="experiments/results/4_dgim_error_and_memory.png" alt="DGIM error and memory"></td>
+</tr>
+</table>
+
+## Project structure
+
+```
+Safelink-BDA/
+├── app.py                         Flask app: checker + "How it works" dashboard
+├── templates/index.html           Web UI (no external libraries, works offline)
+├── core/
+│   ├── bloom_filter.py            Bloom filter
+│   ├── dgim.py                    DGIM
+│   └── url_utils.py               URL normalisation
+├── mapreduce/
+│   ├── bloom_mapper.py / bloom_reducer.py    Job 1: build Bloom filter
+│   ├── stats_mapper.py / stats_reducer.py    Job 2: scam analytics
+│   ├── run_local.py               Simulates Hadoop: split → map → combine → shuffle → reduce
+│   └── build_from_hadoop_output.py
+├── data/
+│   ├── download_feeds.py          Real feeds: OpenPhish, URLhaus
+│   └── generate_sample_data.py    Synthetic India-style scam links
+├── experiments/evaluate.py        Charts and numbers for the report
+└── docs/screenshots/
 ```
 
-## Demo script (5 minutes)
-1. **Check a link tab** → click "a known scam link" → red verdict. Click "a fake-looking bank link" → amber with reasons → Report it → check again → now red (Bloom filter updated live).
-2. **How it works tab** → show the 7 bit positions of the last link: all 1 = "maybe", one 0 = "definitely not".
-3. Click **Simulate 500 normal checks** → meter stays Calm. Click **Simulate a scam wave** → chart crosses the red line, meter shows Scam wave. Run normal again → it drops back.
-4. Show DGIM buckets (1, 1, 2, 2, 4, 8 … ) and "10 buckets vs 1,000 bits".
-5. Show MapReduce analytics and the `run_local.py` output (combiner cut network traffic).
+## Demo walkthrough
 
-## Results (50,000 scam links)
-| Metric | Value |
-|---|---|
-| Bloom filter memory | 58.5 KB (normal Python set ≈ 4.3 MB) → **~75× smaller** |
-| Hash functions k | 7 (optimal for 1%) |
-| False-positive rate | theoretical 1.00%, observed 1.04% |
-| False negatives | 0 (guaranteed) |
-| Database lookups avoided | ~87% |
-| MapReduce build = direct build | bit-for-bit identical |
-| DGIM memory, N = 1000 | ~10 buckets (~80 bytes) vs 1,000 bits |
-| DGIM error | mean ~12%, max ~35% (bound 50%) |
-| DGIM buckets for N = 1,000,000 | ~29 |
-| Wave detection | alert within ~50 checks of the wave starting |
+1. **Check a link** → *a known scam link* → red verdict.
+2. *A fake-looking bank link* → amber with reasons → **Report as scam** → check again → now red.
+3. **How it works** → see the 7 bit positions for the last link (all 1 = maybe, any 0 = definitely not).
+4. **Simulate 500 normal checks** → meter stays calm. **Simulate a scam wave** → chart crosses the red line.
+5. Point out the DGIM buckets (1, 1, 2, 2, 4, 8 …) and the MapReduce analytics.
 
-## Team split (3 members)
-| Member | Owns | Explains in viva |
-|---|---|---|
-| Member 1 | `core/bloom_filter.py`, `data/` scripts, `experiments` charts 1–2 | Bloom filter math, m/k formulas, false positives, why no deletes |
-| Member 2 | `core/dgim.py`, wave alert logic, charts 3–4 | DGIM bucket rules, merging, estimate, 50% bound, memory |
-| Member 3 | `mapreduce/`, Hadoop commands, `app.py` + UI | HDFS blocks, map/combine/shuffle/reduce, two-stage architecture |
+<details>
+<summary><b>Viva questions</b></summary>
 
-## Likely viva questions
-- **Why not just use a set or database?** At crore-scale a set needs GBs of RAM; the Bloom filter needs MBs and fits on a phone or edge server.
-- **Can a Bloom filter miss a scam?** No. False negatives are impossible; only false positives, which the database step clears.
-- **How do you remove a link from a Bloom filter?** You can't (clearing a bit could affect other links). Use a Counting Bloom filter or rebuild with MapReduce.
-- **Why at most 2 buckets of each size in DGIM?** It keeps the oldest bucket small relative to the total, which bounds error at 50%; allowing r buckets per size gives error ≤ 1/(r−1).
-- **Why is the reducer safe as a combiner?** Both jobs sum counts; sum is associative and commutative. (An average would not be safe.)
-- **Why check both the full URL and the domain?** Some feeds list entire scam domains, others list one page on a hacked site.
+- **Why not a normal set or database?** At crore scale a set needs GBs of RAM; the Bloom Filter needs MBs and can live on a phone or edge server.
+- **Can a Bloom Filter miss a scam?** No. False negatives are impossible; false positives are cleared by the exact lookup.
+- **How do you delete a link?** You can't; clearing a bit may affect other links. Use a Counting Bloom Filter or rebuild with MapReduce.
+- **Why at most 2 buckets per size in DGIM?** It keeps the oldest bucket small relative to the total, bounding error at 50%. With r buckets per size, error ≤ 1/(r−1).
+- **Why is the reducer safe as a combiner?** Both jobs sum counts, and sum is associative and commutative. An average would not be safe.
+- **Why check both the full URL and the domain?** Some feeds list whole scam domains; others list one page on a hacked site.
+</details>
 
-## Limitations & future scope
-- A link not on the list is not proof of safety; the pattern check helps but can be fooled.
-- Add Flajolet-Martin to count unique scam links seen per day, Counting Bloom filter for deletions,
-  per-city waves, a WhatsApp bot or browser extension front-end, and Spark Streaming for real-time scale.
-- Sample data is synthetic; for the final demo run `data/download_feeds.py` to use real live feeds.
+## Limitations and future scope
+
+- A link not on the list isn't proof of safety; the pattern check helps but can be fooled.
+- Add Flajolet-Martin for unique scam links per day, a Counting Bloom Filter for deletions, per-city wave alerts, a WhatsApp bot or browser extension, and Spark Streaming for real-time scale.
+- The sample dataset is synthetic; use `data/download_feeds.py` for real live feeds.
+
+---
+
+<div align="center"><sub>Big Data Analytics mini project · Bloom Filter + DGIM + MapReduce</sub></div>
