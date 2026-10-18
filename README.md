@@ -6,6 +6,8 @@
 
 A scam-link checker with live scam-wave alerts, built on **Bloom Filters**, **DGIM** and **MapReduce**.
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-safelink--bda.onrender.com-13795B?style=for-the-badge&logo=render&logoColor=white)](https://safelink-bda.onrender.com)
+
 ![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)
 ![Flask](https://img.shields.io/badge/Flask-3.x-000000?logo=flask&logoColor=white)
 ![Hadoop](https://img.shields.io/badge/Hadoop-Streaming-66CCFF?logo=apachehadoop&logoColor=black)
@@ -13,7 +15,11 @@ A scam-link checker with live scam-wave alerts, built on **Bloom Filters**, **DG
 ![DGIM](https://img.shields.io/badge/DGIM-10%20buckets%20vs%201000%20bits-2F5BD3)
 ![Subject](https://img.shields.io/badge/Big%20Data%20Analytics-Mini%20Project-13795B)
 
-<img src="docs/screenshots/checker.png" alt="SafeLink link checker" width="760">
+### 🔗 [Open the live app → safelink-bda.onrender.com](https://safelink-bda.onrender.com)
+
+<sub>Hosted on Render's free plan. If the site has been idle, the first load takes about 50 seconds to wake up.</sub>
+
+<a href="https://safelink-bda.onrender.com"><img src="docs/screenshots/checker.png" alt="SafeLink link checker" width="760"></a>
 
 </div>
 
@@ -76,6 +82,13 @@ The Bloom Filter answers first and the exact database is queried only on a "mayb
 | **HDFS** | README commands | Blocks, replication, `fsck`, `put` / `getmerge` |
 | **Stream processing** | `app.py` | Every check is a bit in an unbounded stream |
 
+## Try it live
+
+1. Open **[safelink-bda.onrender.com](https://safelink-bda.onrender.com)**.
+2. Click **a known scam link** → red verdict.
+3. Click **a fake-looking bank link** → amber with reasons → **Report as scam** → check again → now red.
+4. Open **How it works** → click **Simulate 500 normal checks**, then **Simulate a scam wave** → watch the DGIM chart cross the red line and the meter switch to *Scam wave*.
+
 ## Screenshots
 
 <table>
@@ -85,7 +98,7 @@ The Bloom Filter answers first and the exact database is queried only on a "mayb
 </tr>
 </table>
 
-## Quick start
+## Run it locally
 
 ```bash
 git clone https://github.com/katkarvismaya19-web/Safelink-BDA.git
@@ -127,6 +140,18 @@ hadoop jar $HADOOP_HOME/share/hadoop/tools/lib/hadoop-streaming-*.jar \
   -mapper stats_mapper.py -combiner stats_reducer.py -reducer stats_reducer.py \
   -file mapreduce/stats_mapper.py -file mapreduce/stats_reducer.py
 ```
+</details>
+
+<details>
+<summary><b>Deployment (Render)</b></summary>
+
+| Setting | Value |
+|---|---|
+| Build command | `pip install -r requirements.txt` |
+| Start command | `gunicorn app:app --workers 1 --threads 4 --timeout 120` |
+| Plan | Free |
+
+A single worker is used on purpose: the DGIM window and scam-wave meter live in memory, so more workers would split the stream between processes.
 </details>
 
 ## Results
@@ -178,14 +203,6 @@ Safelink-BDA/
 └── docs/screenshots/
 ```
 
-## Demo walkthrough
-
-1. **Check a link** → *a known scam link* → red verdict.
-2. *A fake-looking bank link* → amber with reasons → **Report as scam** → check again → now red.
-3. **How it works** → see the 7 bit positions for the last link (all 1 = maybe, any 0 = definitely not).
-4. **Simulate 500 normal checks** → meter stays calm. **Simulate a scam wave** → chart crosses the red line.
-5. Point out the DGIM buckets (1, 1, 2, 2, 4, 8 …) and the MapReduce analytics.
-
 <details>
 <summary><b>Viva questions</b></summary>
 
@@ -200,9 +217,16 @@ Safelink-BDA/
 ## Limitations and future scope
 
 - A link not on the list isn't proof of safety; the pattern check helps but can be fooled.
+- The live demo resets its stream counters whenever the free server restarts; reported links are also lost on restart.
 - Add Flajolet-Martin for unique scam links per day, a Counting Bloom Filter for deletions, per-city wave alerts, a WhatsApp bot or browser extension, and Spark Streaming for real-time scale.
 - The sample dataset is synthetic; use `data/download_feeds.py` for real live feeds.
 
 ---
 
-<div align="center"><sub>Big Data Analytics mini project · Bloom Filter + DGIM + MapReduce</sub></div>
+<div align="center">
+
+**[🔗 safelink-bda.onrender.com](https://safelink-bda.onrender.com)**
+
+<sub>Big Data Analytics mini project · Bloom Filter + DGIM + MapReduce</sub>
+
+</div>
